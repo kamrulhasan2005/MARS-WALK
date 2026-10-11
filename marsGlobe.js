@@ -60,6 +60,7 @@ export class MarsGlobe {
     const dpr = window.devicePixelRatio || 1;
     this.canvas.width = rect.width * dpr;
     this.canvas.height = rect.height * dpr;
+    this.ctx.setTransform(1, 0, 0, 1, 0, 0);
     this.ctx.scale(dpr, dpr);
     this.width = rect.width;
     this.height = rect.height;
@@ -69,27 +70,37 @@ export class MarsGlobe {
   initEvents() {
     window.addEventListener('resize', () => this.resize());
 
-    this.canvas.addEventListener('mousedown', (e) => {
+    this.canvas.addEventListener('pointerdown', (e) => {
       this.isDragging = true;
       this.lastMouseX = e.clientX;
       this.lastMouseY = e.clientY;
+      this.dragDistance = 0;
+      this.canvas.setPointerCapture(e.pointerId);
     });
 
-    window.addEventListener('mousemove', (e) => {
+    this.canvas.addEventListener('pointermove', (e) => {
       if (!this.isDragging) return;
       const dx = e.clientX - this.lastMouseX;
       const dy = e.clientY - this.lastMouseY;
+      this.dragDistance += Math.hypot(dx, dy);
       this.rotationY += dx * 0.008;
       this.rotationX = Math.max(-0.8, Math.min(0.8, this.rotationX + dy * 0.008));
       this.lastMouseX = e.clientX;
       this.lastMouseY = e.clientY;
     });
 
-    window.addEventListener('mouseup', () => {
+    this.canvas.addEventListener('pointerup', () => {
+      this.isDragging = false;
+    });
+    this.canvas.addEventListener('pointercancel', () => {
       this.isDragging = false;
     });
 
     this.canvas.addEventListener('click', (e) => {
+      if (this.dragDistance > 8) {
+        this.dragDistance = 0;
+        return;
+      }
       const rect = this.canvas.getBoundingClientRect();
       const clickX = e.clientX - rect.left - this.width / 2;
       const clickY = e.clientY - rect.top - this.height / 2;

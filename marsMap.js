@@ -41,11 +41,26 @@ export class MarsMap {
     if (!this.canvas) return;
     const rect = this.canvas.parentElement.getBoundingClientRect();
     const dpr = window.devicePixelRatio || 1;
+    const previousWidth = this.width || 0;
+    const previousHeight = this.height || 0;
     this.canvas.width = rect.width * dpr;
     this.canvas.height = rect.height * dpr;
+    this.ctx.setTransform(1, 0, 0, 1, 0, 0);
     this.ctx.scale(dpr, dpr);
     this.width = rect.width;
     this.height = rect.height;
+
+    if (!previousWidth || !previousHeight) {
+      this.centerOnJezero();
+      return;
+    }
+
+    const offsetX = (this.width - previousWidth) / 2;
+    const offsetY = (this.height - previousHeight) / 2;
+    this.panX += offsetX;
+    this.panY += offsetY;
+    this.targetPanX += offsetX;
+    this.targetPanY += offsetY;
   }
 
   centerOnJezero() {
@@ -60,17 +75,21 @@ export class MarsMap {
   initEvents() {
     window.addEventListener('resize', () => this.resize());
 
-    // Mouse drag to pan
-    this.canvas.addEventListener('mousedown', (e) => {
+    // Pointer input supports mouse, pen, and touch.
+    this.canvas.addEventListener('pointerdown', (e) => {
       this.isDragging = true;
+      this.activePointerId = e.pointerId;
       this.lastMouseX = e.clientX;
       this.lastMouseY = e.clientY;
+      this.dragDistance = 0;
+      this.canvas.setPointerCapture(e.pointerId);
     });
 
-    window.addEventListener('mousemove', (e) => {
-      if (this.isDragging) {
+    window.addEventListener('pointermove', (e) => {
+      if (this.isDragging && e.pointerId === this.activePointerId) {
         const dx = e.clientX - this.lastMouseX;
         const dy = e.clientY - this.lastMouseY;
+        this.dragDistance += Math.hypot(dx, dy);
         this.panX += dx;
         this.panY += dy;
         this.targetPanX = this.panX;
@@ -79,19 +98,25 @@ export class MarsMap {
         this.lastMouseY = e.clientY;
       }
 
+      if (e.pointerType !== 'mouse') return;
       // Calculate Martian Lat/Lon under cursor
       const rect = this.canvas.getBoundingClientRect();
       const mouseX = e.clientX - rect.left;
       const mouseY = e.clientY - rect.top;
 
-      if (mouseX >= 0 && mouseX <= this.width && mouseY >= 0 && mouseY <= this.height) {
+      if (!this.isDragging && mouseX >= 0 && mouseX <= this.width && mouseY >= 0 && mouseY <= this.height) {
         this.updateCoordsHUD(mouseX, mouseY);
         this.checkHover(mouseX, mouseY);
       }
     });
 
-    window.addEventListener('mouseup', () => {
+    this.canvas.addEventListener('pointerup', () => {
       this.isDragging = false;
+      this.activePointerId = null;
+    });
+    this.canvas.addEventListener('pointercancel', () => {
+      this.isDragging = false;
+      this.activePointerId = null;
     });
 
     // Mouse wheel zoom
@@ -114,6 +139,10 @@ export class MarsMap {
 
     // Click to select
     this.canvas.addEventListener('click', (e) => {
+      if (this.dragDistance > 8) {
+        this.dragDistance = 0;
+        return;
+      }
       const rect = this.canvas.getBoundingClientRect();
       const mouseX = e.clientX - rect.left;
       const mouseY = e.clientY - rect.top;
